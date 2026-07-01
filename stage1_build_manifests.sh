@@ -7,6 +7,16 @@ SUMMARIZER="${SCRIPT_DIR}/summarize_manifests.py"
 IMAGES_ROOT="${1:-1_3D_images}"
 OUTPUT_DIR="${2:-radiomics_manifests}"
 CONFIG_PATH="${3:-${SCRIPT_DIR}/radiomics_config.yaml}"
+PYTHON="${PYTHON:-python3}"
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  echo "Usage: ./stage1_build_manifests.sh [images_root] [output_dir] [config_path]"
+  echo
+  echo "Default images_root: 1_3D_images"
+  echo "Default output_dir: radiomics_manifests"
+  echo "Default config_path: radiomics_config.yaml next to this script"
+  exit 0
+fi
 
 if [[ ! -d "${IMAGES_ROOT}" ]]; then
   echo "Images root not found: ${IMAGES_ROOT}" >&2
@@ -28,7 +38,7 @@ while IFS= read -r -d '' patient_dir; do
   output_json="${OUTPUT_DIR}/${patient_id}.json"
   total=$((total + 1))
 
-  if ! python3 "${RUNNER}" "${patient_dir}" "${output_json}" --config "${CONFIG_PATH}"; then
+  if ! "${PYTHON}" "${RUNNER}" "${patient_dir}" "${output_json}" --config "${CONFIG_PATH}"; then
     failed=$((failed + 1))
     echo "${patient_id}: failed" >&2
   fi
@@ -41,4 +51,4 @@ if [[ "${failed}" -gt 0 ]]; then
   exit 1
 fi
 
-python3 "${SUMMARIZER}" "${OUTPUT_DIR}" "${OUTPUT_DIR}/summary.json" --print-table
+"${PYTHON}" "${SUMMARIZER}" "${OUTPUT_DIR}" "${OUTPUT_DIR}/summary.json" --print-table

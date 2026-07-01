@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  echo "Usage: ./run_radiomics_features.sh [manifest_dir] [output_dir] [config_path] [jobs]"
+  echo "Usage: ./stage2_extract_features.sh [manifest_dir] [output_dir] [config_path] [jobs]"
   echo
   echo "Default manifest_dir: radiomics_manifests"
   echo "Default output_dir: radiomics_features"

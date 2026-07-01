@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Extract radiomics features from manifest-recognized images.
 
-Stage 1 is dataset description (`run_all.sh` + `runner.py`). This script is
+Stage 1 is dataset description (`stage1_build_manifests.sh` + `runner.py`). This script is
 Stage 2: it consumes those manifests, prepares feature images, lets PyFE handle
 ROI normalization/resampling during extraction, and writes long CSV rows. It
 does not segment, train models, or select features.
@@ -343,7 +343,7 @@ def make_signature(
     cache_config = config.get("feature_cache", {}) or {}
     hash_contents = bool(cache_config.get("hash_file_contents", False))
     payload = {
-        "cache_version": 4,
+        "cache_version": 5,
         "sample_id": sample_id,
         "source_images": {
             name: file_fingerprint(path, hash_contents)
@@ -1291,7 +1291,10 @@ def process_manifest(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]]:
     manifest = load_manifest(manifest_path)
     patient_id = str(manifest.get("patient_id", manifest_path.stem))
-    patient_dir = Path(str(manifest["patient_dir"]))
+    patient_dir_raw = manifest.get("patient_dir")
+    if patient_dir_raw is None:
+        raise ValueError(f"Manifest missing required field 'patient_dir': {manifest_path}")
+    patient_dir = Path(str(patient_dir_raw))
     modalities = configured_modalities(config)
     require_complete = bool(config.get("require_complete_patients", True))
     reference_name = str(config.get("reference_image", modalities[0]))
@@ -1337,12 +1340,10 @@ def process_manifest(
     )
 
     for modality in missing:
-        zero_path = create_zero_like(
-            feature_roi,
-            resampled_dir / f"{modality}_missing_zero_target_grid.nii.gz",
-        )
+        zero_path = resampled_dir / f"{modality}_missing_zero_target_grid.nii.gz"
+        if not zero_path.exists():
+            create_zero_like(resampled_images[reference_name], zero_path)
         resampled_images[modality] = zero_path
-        image_paths[modality] = zero_path
 
     write_generic_rows(patient_work / "geometry_check.csv", geometry)
 
@@ -1516,7 +1517,7 @@ def main() -> int:
     )
     if errors:
         print(f"Errors: {errors_csv}", file=sys.stderr)
-    return 0 if original_rows and not errors else 1
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

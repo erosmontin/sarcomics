@@ -42,6 +42,7 @@ ROW_METADATA_COLUMNS = {
     "bin_counts",
     "extractor",
     "feature_status",
+    "feature_warnings",
     "normalized",
     "normalize_scale",
     "pyfe_radius",
