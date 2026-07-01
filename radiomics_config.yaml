@@ -1,0 +1,136 @@
+schema_version: 1
+
+search:
+  # Patient folders are scanned recursively, but these directories are preferred
+  # when more than one candidate matches a single-image entry.
+  preferred_directories:
+    - "1_3D_images"
+  allowed_extensions:
+    - ".mha"
+    - ".mhd"
+    - ".nrrd"
+    - ".nii"
+    - ".nii.gz"
+
+# Stage 2 extraction settings.
+reference_image: t1w
+working_spacing_mm: [2.0, 2.0, 2.0]
+minimum_physical_overlap_fraction: 0.20
+
+require_complete_patients: false
+
+bin_counts: [16]
+# Backward-compatible name used by the PyFE tutorial; interpreted here as
+# PyRadiomics GLCM distances.
+pyfe_radius: [1]
+normalize: true
+
+intensity_scaling:
+  adc:
+    divide_by: 3000.0
+    note: "Normalize ADC by water diffusivity reference before radiomics."
+
+# Options: [Original], [Original, Wavelet, LoG], or all.
+image_types:
+  - all
+# skip_image_types:
+#   - LBP3D
+skip_failed_image_types: true
+
+log_sigmas: [1.0, 2.0, 3.0]
+include_shape_features: true
+include_benford_features: false
+minimum_mask_voxels: 10
+
+qc:
+  enabled: true
+  alpha: 0.45
+  dpi: 120
+
+feature_cache:
+  enabled: true
+  hash_file_contents: false
+
+augmentation:
+  enabled: false
+  samples_per_patient: 2
+  random_state: 42
+  rotation_degrees:
+    - [-5.0, 5.0]
+    - [-5.0, 5.0]
+    - [-5.0, 5.0]
+  translation_mm:
+    - [-5.0, 5.0]
+    - [-5.0, 5.0]
+    - [-5.0, 5.0]
+  scale:
+    - [1.0, 1.0]
+    - [1.0, 1.0]
+    - [1.0, 1.0]
+
+roi:
+  name: "toi_T"
+  required: true
+  multiple: false
+  patterns:
+    - "ROI_T.nrrd"
+    - "roi_t.nrrd"
+    - "*ROI*T*.nrrd"
+    - "*TOI*T*.nrrd"
+    - "*toi*T*.nrrd"
+
+modalities:
+  t1w:
+    label: "T1-weighted"
+    required: true
+    multiple: false
+    patterns:
+      - "T1w.mha"
+      - "T1w.nrrd"
+      - "*T1w*.mha"
+      - "*T1w*.nrrd"
+      - "*T1*.mha"
+      - "*T1*.nrrd"
+    exclude_patterns:
+      - "*CONT*"
+      - "*contrast*"
+      - "*post*"
+  t1wc:
+    label: "T1-weighted contrast-enhanced"
+    required: true
+    multiple: false
+    patterns:
+      - "T1w_CONT.mha"
+      - "T1w_CONT.nrrd"
+      - "*T1*CONT*.mha"
+      - "*T1*CONT*.nrrd"
+      - "*T1*contrast*.mha"
+      - "*T1*contrast*.nrrd"
+      - "*T1*post*.mha"
+      - "*T1*post*.nrrd"
+
+  t2w:
+    label: "T2-weighted"
+    required: true
+    multiple: false
+    patterns:
+      - "T2w.mha"
+      - "T2w.nrrd"
+      - "*T2w*.mha"
+      - "*T2w*.nrrd"
+      - "*T2*.mha"
+      - "*T2*.nrrd"
+
+  adc:
+    label: "ADC map"
+    required: true
+    multiple: false
+    patterns:
+      - "ADC.mha"
+      - "ADC.nrrd"
+      - "*ADC*.mha"
+      - "*ADC*.nrrd"
+
+radiomics:
+  # Label value inside ROI_T.nrrd to use as the tumor mask.
+  label: 1

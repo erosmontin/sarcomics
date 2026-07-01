@@ -1,0 +1,19 @@
+# Core extraction stack. Use a Python 3.9 environment for PyFE v3/PyRadiomics
+# compatibility.
+numpy>=1.23,<2.0
+pandas>=1.5,<2.2
+PyYAML>=6.0
+SimpleITK>=2.2,<2.4
+PyRadiomics==3.0.1
+PyWavelets
+pykwalify
+scikit-image<0.23
+scipy>=1.9,<1.14
+toml
+benford_py
+tqdm
+
+# PyFE v3 and its core project dependencies
+git+https://github.com/erosmontin/pynico.git@v3
+git+https://github.com/erosmontin/pyable.git@v4-branch
+git+https://github.com/erosmontin/pyfe.git@v3-branch

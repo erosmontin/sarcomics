@@ -1,0 +1,8 @@
+1_3D_images/
+radiomics_manifests/
+.agent
+.codex
+__pycache__
+artifatcs/
+radiomics_features/
+.DS_Store
