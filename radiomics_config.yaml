@@ -53,7 +53,7 @@ feature_cache:
 
 augmentation:
   enabled: true
-  samples_per_patient: 2
+  samples_per_patient: 3
   random_state: 42
   rotation_degrees:
     - [-5.0, 5.0]
