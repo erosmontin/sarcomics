@@ -58,7 +58,7 @@ augmentation:
   rotation_degrees:
     - [-5.0, 5.0]
     - [-5.0, 5.0]
-    - [-5.0, 5.0]
+    - [-1.0, 1.0]
   translation_mm:
     - [-5.0, 5.0]
     - [-5.0, 5.0]
