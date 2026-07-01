@@ -6,17 +6,72 @@ Pipeline to scan patient directories, build JSON manifests, and extract PyFE/PyR
 
 ## Environment Setup
 
-Use the `able` conda environment (Python 3.9):
+This project expects a Python 3.9 conda environment. The examples below use an
+environment named `able`.
+
+### 1. Install Miniconda
+
+If `conda` is not installed, install Miniconda first.
+
+Linux x86_64:
 
 ```bash
-conda activate able
-pip install -r requirements.txt
+cd /tmp
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh -b -p "$HOME/miniconda3"
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda init bash
 ```
 
-> **Note:** All scripts respect the `PYTHON` environment variable. Set it if you need a specific interpreter:
-> ```bash
-> export PYTHON=/path/to/envs/able/bin/python
-> ```
+macOS:
+
+```bash
+cd /tmp
+# Apple Silicon:
+curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh
+bash Miniconda3-latest-MacOSX-arm64.sh -b -p "$HOME/miniconda3"
+
+# Intel Mac users should download the x86_64 installer instead:
+# https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh
+
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda init zsh
+```
+
+After `conda init`, open a new terminal or run:
+
+```bash
+source ~/.bashrc   # Linux/bash
+# or
+source ~/.zshrc    # macOS/zsh
+```
+
+### 2. Create the `able` Environment
+
+From the repository root:
+
+```bash
+conda create -n able python=3.9 pip git -y
+conda activate able
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+The requirements install PyRadiomics, SimpleITK, PyFE, pyable, and the other
+feature-extraction dependencies.
+
+### 3. Verify the Environment
+
+```bash
+python -c "import SimpleITK, radiomics, pyfe, pyable; print('environment ok')"
+```
+
+All scripts respect the `PYTHON` environment variable. This is useful when
+running from outside an activated conda shell:
+
+```bash
+export PYTHON="$HOME/miniconda3/envs/able/bin/python"
+```
 
 ---
 
@@ -144,3 +199,21 @@ qc:
 | Slow extraction | Many image types / large images | Set `image_types: [Original]` or reduce `bin_counts` |
 | Wrong files matched | Filename patterns too broad | Refine `patterns`/`exclude_patterns` in `modalities` section |
 | Cache not reused | File timestamps changed (e.g., re-copy) | Set `feature_cache.hash_file_contents: true` |
+
+
+
+
+## Cite Us
+1. Montin, E., Kijowski, R., Youm, T., & Lattanzi, R. (2024). Radiomics features outperform standard radiological measurements in detecting femoroacetabular impingement on three‐dimensional magnetic resonance imaging. In Journal of Orthopaedic Research. Wiley. https://doi.org/10.1002/jor.25952
+
+1. Montin, E., Kijowski, R., Youm, T., & Lattanzi, R. (2023). A radiomics approach to the diagnosis of femoroacetabular impingement. In Frontiers in Radiology (Vol. 3). Frontiers Media SA. https://doi.org/10.3389/fradi.2023.1151258
+
+1. Cavatorta, C., Meroni, S., Montin, E., Oprandi, M. C., Pecori, E., Lecchi, M., Diletto, B., Alessandro, O., Peruzzo, D., Biassoni, V., Schiavello, E., Bologna, M., Massimino, M., Poggi, G., Mainardi, L., Arrigoni, F., Spreafico, F., Verderio, P., Pignoli, E., & Gandola, L. (2021). Retrospective study of late radiation-induced damages after focal radiotherapy for childhood brain tumors. In S. D. Ginsberg (Ed.), PLOS ONE (Vol. 16, Issue 2, p. e0247748). Public Library of Science (PLoS). https://doi.org/10.1371/journal.pone.0247748
+
+1. Montin, E., Belfatto, A., Bologna, M., Meroni, S., Cavatorta, C., Pecori, E., Diletto, B., Massimino, M., Oprandi, M. C., Poggi, G., Arrigoni, F., Peruzzo, D., Pignoli, E., Gandola, L., Cerveri, P., & Mainardi, L. (2020). A multi-metric registration strategy for the alignment of longitudinal brain images in pediatric oncology. In Medical &amp; Biological Engineering &amp; Computing (Vol. 58, Issue 4, pp. 843–855). Springer Science and Business Media LLC. https://doi.org/10.1007/s11517-019-02109-4
+
+
+
+
+[*Dr. Eros Montin, PhD*](https://biodimensional.com)
+**46&2 just ahead of me!**
