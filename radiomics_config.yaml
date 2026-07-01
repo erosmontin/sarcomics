@@ -1,7 +1,6 @@
 schema_version: 1
 
 pipeline:
-  # Hospital-facing pipeline inputs/outputs used by run_radiomics_pipeline.sh.
   images_root: "1_3D_images"
   manifest_dir: "radiomics_manifests"
   output_dir: "radiomics_features"
@@ -17,14 +16,13 @@ search:
 
 # Stage 2 extraction settings.
 reference_image: t1w
-working_spacing_mm: [2.5, 2.5, 2.5]
+working_spacing_mm: [1, 1, 1]
 minimum_physical_overlap_fraction: 0.10
 
 require_complete_patients: false
 
-bin_counts: [8,16]
-# PyRadiomics GLCM distances.
-pyfe_radius: [1,2]
+bin_counts: [16,32, 64, 128]
+pyfe_radius: [1,2,3]
 normalize: true
 
 intensity_scaling:
@@ -80,6 +78,9 @@ roi:
     - "*ROI*T*.nrrd"
     - "*TOI*T*.nrrd"
     - "*toi*T*.nrrd"
+    - "*roi*T*.nrrd"
+    - "*tumor*.nii"
+    - "*tumor*.nii.gz"
 
 modalities:
   t1w:
@@ -93,6 +94,11 @@ modalities:
       - "*T1w*.nrrd"
       - "*T1*.mha"
       - "*T1*.nrrd"
+      - "*T1w*.nii"
+      - "*T1w*.nii.gz"
+      - "*T1*.nii"
+      - "*T1*.nii.gz"
+
     exclude_patterns:
       - "*CONT*"
       - "*contrast*"
@@ -110,6 +116,11 @@ modalities:
       - "*T1*contrast*.nrrd"
       - "*T1*post*.mha"
       - "*T1*post*.nrrd"
+      - "*T1*CONT*.nii"
+      - "*T1*CONT*.nii.gz"
+      - "*T1*contrast*.nii"
+      - "*T1*contrast*.nii.gz"
+
 
   t2w:
     label: "T2-weighted"
@@ -122,6 +133,11 @@ modalities:
       - "*T2w*.nrrd"
       - "*T2*.mha"
       - "*T2*.nrrd"
+      - "*T2w*.nii"
+      - "*T2w*.nii.gz"
+      - "*T2*.nii"
+      - "*T2*.nii.gz"
+
 
   adc:
     label: "ADC map"
@@ -132,6 +148,9 @@ modalities:
       - "ADC.nrrd"
       - "*ADC*.mha"
       - "*ADC*.nrrd"
+      - "*ADC*.nii"
+      - "*ADC*.nii.gz"
+
 
 radiomics:
   # Label value inside ROI_T.nrrd to use as the tumor mask.
