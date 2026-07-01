@@ -3,8 +3,8 @@
 
 Stage 1 is dataset description (`stage1_build_manifests.sh` + `runner.py`). This script is
 Stage 2: it consumes those manifests, prepares feature images, lets PyFE handle
-ROI normalization/resampling during extraction, and writes long CSV rows. It
-does not segment, train models, or select features.
+ROI normalization/resampling during extraction, and writes long CSV rows for
+internal concatenation. It does not segment, train models, or select features.
 """
 
 from __future__ import annotations
@@ -155,7 +155,17 @@ def parse_args() -> argparse.Namespace:
         "--augmented-output-csv",
         type=Path,
         default=None,
-        help="Optional CSV including original and augmented samples.",
+        help="Optional CSV for augmented samples.",
+    )
+    parser.add_argument(
+        "--augmentation-only",
+        action="store_true",
+        help="Extract only augmented samples and leave the original output untouched.",
+    )
+    parser.add_argument(
+        "--disable-augmentation",
+        action="store_true",
+        help="Ignore augmentation settings and extract original samples only.",
     )
     parser.add_argument(
         "--errors-csv",
@@ -327,7 +337,6 @@ def relevant_config(config: dict[str, Any]) -> dict[str, Any]:
         "include_benford_features",
         "minimum_mask_voxels",
         "feature_cache",
-        "augmentation",
         "radiomics",
     ]
     return {key: config.get(key) for key in keys if key in config}
@@ -1360,38 +1369,62 @@ def process_manifest(
         "scale_y": 1.0,
         "scale_z": 1.0,
     }
-    original_rows = extract_sample_with_cache(
-        sample_id=patient_id,
-        source_subject_id=patient_id,
-        original_images=image_paths,
-        feature_images=resampled_images,
-        roi_path=roi_path,
-        feature_roi=feature_roi,
-        manifest_path=manifest_path,
-        config=config,
-        sample_metadata=original_metadata,
-        cache_dir=cache_dir,
-        missing_modalities=missing,
-        show_progress=show_progress,
-    )
+    augmentation_only = bool(config.get("_augmentation_only", False))
+    disable_augmentation = bool(config.get("_disable_augmentation", False))
+    original_rows: list[dict[str, Any]] = []
+    if not augmentation_only:
+        original_rows = extract_sample_with_cache(
+            sample_id=patient_id,
+            source_subject_id=patient_id,
+            original_images=image_paths,
+            feature_images=resampled_images,
+            roi_path=roi_path,
+            feature_roi=feature_roi,
+            manifest_path=manifest_path,
+            config=config,
+            sample_metadata=original_metadata,
+            cache_dir=cache_dir,
+            missing_modalities=missing,
+            show_progress=show_progress,
+        )
 
-    all_rows = list(original_rows)
+    augmented_rows: list[dict[str, Any]] = []
     augmentation = get_augmentation_config(config)
+    if disable_augmentation:
+        augmentation["enabled"] = False
     if augmentation["enabled"]:
         seed = int(augmentation["random_state"]) + sum(ord(char) for char in patient_id)
         rng = np.random.default_rng(seed)
         for augmentation_index in range(augmentation["samples_per_patient"]):
             sample_id = f"{patient_id}-aug{augmentation_index:04d}"
             parameters = sample_augmentation_parameters(rng, augmentation, augmentation_index)
+            aug_dir = patient_work / "augmented" / safe_name(sample_id)
             augmented_images, augmented_roi = create_augmented_sample(
                 resampled_images=resampled_images,
                 resampled_roi=feature_roi,
                 reference_name=reference_name,
-                output_dir=patient_work / "augmented" / safe_name(sample_id),
+                output_dir=aug_dir,
                 sample_id=sample_id,
                 parameters=parameters,
             )
-            all_rows.extend(
+            SITKImaginable, Roiable, plotOverlay = import_pyable(config.get("pyable_path"))
+            aug_qc_results = write_roi_qc_overlays(
+                image_paths=augmented_images,
+                roi_path=augmented_roi,
+                roi_label=int(config.get("radiomics", {}).get("label", 1)),
+                output_dir=aug_dir / "qc",
+                config=config,
+                SITKImaginable=SITKImaginable,
+                Roiable=Roiable,
+                plotOverlay=plotOverlay,
+            )
+            for _mod, _qc in aug_qc_results.items():
+                if _qc.get("qc_overlay_error"):
+                    print(
+                        f"  QC overlay error [{sample_id}/{_mod}]: {_qc['qc_overlay_error']}",
+                        file=sys.stderr,
+                    )
+            augmented_rows.extend(
                 extract_sample_with_cache(
                     sample_id=sample_id,
                     source_subject_id=patient_id,
@@ -1407,7 +1440,7 @@ def process_manifest(
                     show_progress=show_progress,
                 )
             )
-    return original_rows, all_rows, []
+    return original_rows, augmented_rows, []
 
 
 def process_manifest_job(arguments: tuple[Path, dict[str, Any], Path, bool]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, str]]]:
@@ -1447,16 +1480,30 @@ def main() -> int:
     if not manifest_dir.is_dir():
         print(f"Manifest directory not found: {manifest_dir}", file=sys.stderr)
         return 2
+    if args.augmentation_only and args.disable_augmentation:
+        print(
+            "extract_radiomics_features.py: --augmentation-only and --disable-augmentation "
+            "cannot be used together.",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         config = load_config(config_path)
+        config["_augmentation_only"] = bool(args.augmentation_only)
+        config["_disable_augmentation"] = bool(args.disable_augmentation)
+        augmentation = get_augmentation_config(config)
+        if args.augmentation_only and not augmentation["enabled"]:
+            raise ValueError(
+                "--augmentation-only requires augmentation.enabled: true in the config."
+            )
         import_pyfe_pyrad()
     except Exception as exc:
         print(f"extract_radiomics_features.py: {exc}", file=sys.stderr)
         return 1
 
     original_rows: list[dict[str, Any]] = []
-    all_rows: list[dict[str, Any]] = []
+    augmented_rows: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     paths = manifest_paths(manifest_dir)
     jobs = max(1, int(args.jobs))
@@ -1470,11 +1517,11 @@ def main() -> int:
         )
         for manifest_path in progress:
             progress.set_postfix_str(manifest_path.stem, refresh=True)
-            patient_original, patient_all, patient_errors = process_manifest_job(
+            patient_original, patient_augmented, patient_errors = process_manifest_job(
                 (manifest_path, config, work_root, True)
             )
             original_rows.extend(patient_original)
-            all_rows.extend(patient_all)
+            augmented_rows.extend(patient_augmented)
             errors.extend(patient_errors)
     else:
         print(f"Processing {len(paths)} patient manifests with {jobs} jobs.")
@@ -1492,9 +1539,9 @@ def main() -> int:
             )
             for future in progress:
                 manifest_path = futures[future]
-                patient_original, patient_all, patient_errors = future.result()
+                patient_original, patient_augmented, patient_errors = future.result()
                 original_rows.extend(patient_original)
-                all_rows.extend(patient_all)
+                augmented_rows.extend(patient_augmented)
                 errors.extend(patient_errors)
                 progress.set_postfix(
                     patient=manifest_path.stem,
@@ -1503,17 +1550,24 @@ def main() -> int:
                     refresh=True,
                 )
 
+    write_augmented = bool((config.get("augmentation", {}) or {}).get("enabled", False))
+    if bool(config.get("_disable_augmentation", False)):
+        write_augmented = False
+
     if original_rows:
         write_rows(output_csv, original_rows)
-    if all_rows:
-        write_rows(augmented_output, all_rows)
+    if write_augmented and augmented_rows:
+        write_rows(augmented_output, augmented_rows)
+    elif augmented_output.exists():
+        augmented_output.unlink()
     if errors:
         write_errors(errors_csv, errors)
     elif errors_csv.exists():
         errors_csv.unlink()
 
     print(
-        f"Extracted original rows={len(original_rows)}, all rows={len(all_rows)} -> {output_csv}"
+        f"Extracted original rows={len(original_rows)}, "
+        f"augmented rows={len(augmented_rows)} -> {output_csv}"
     )
     if errors:
         print(f"Errors: {errors_csv}", file=sys.stderr)

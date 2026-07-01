@@ -9,11 +9,14 @@ PyWavelets
 pykwalify
 scikit-image<0.23
 scipy>=1.9,<1.14
+scikit-learn>=1.0,<1.5
+imbalanced-learn>=0.9,<0.13
 toml
 benford_py
 tqdm
 
-# PyFE v3 and its core project dependencies
-git+https://github.com/erosmontin/pynico.git@v3
-git+https://github.com/erosmontin/pyable.git@v4-branch
-git+https://github.com/erosmontin/pyfe.git@v3-branch
+# QC tables and optional ROI overlay helpers.
+matplotlib>=3.5,<3.10
+
+# Direct runtime dependencies used by pyable/pyfe during extraction.
+vtk<9.7

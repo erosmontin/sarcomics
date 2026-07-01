@@ -1,0 +1,11 @@
+# PyFE v3 stack. Install these after requirements.txt with:
+#   python -m pip install --ignore-requires-python --no-deps -r requirements-pyfe.txt
+#
+# --ignore-requires-python is needed because pyfe declares Python <=3.9, which
+# pip interprets as <=3.9.0 and rejects newer Python 3.9 patch releases.
+# --no-deps avoids unrelated optional PyFE dependency chains such as torch-based
+# data loaders; the direct runtime dependencies used by this pipeline are listed
+# in requirements.txt.
+git+https://github.com/erosmontin/pynico.git@v3
+git+https://github.com/erosmontin/pyable.git@v3
+git+https://github.com/erosmontin/pyfe.git@v3-branch

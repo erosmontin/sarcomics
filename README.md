@@ -54,11 +54,19 @@ From the repository root:
 conda create -n able python=3.9 pip git -y
 conda activate able
 python -m pip install --upgrade pip
+python -m pip install "numpy>=1.23,<2.0" "Cython<3"
+python -m pip install --no-build-isolation "PyRadiomics==3.0.1"
 python -m pip install -r requirements.txt
+python -m pip install --ignore-requires-python --no-deps -r requirements-pyfe.txt
 ```
 
 The requirements install PyRadiomics, SimpleITK, PyFE, pyable, and the other
-feature-extraction dependencies.
+feature-extraction dependencies. PyRadiomics is installed once before the full
+requirements because its source build expects `numpy` to already be importable.
+The `--ignore-requires-python` flag is used only for the PyFE Git stack because
+PyFE rejects Python 3.9 patch releases such as 3.9.25 even though the pipeline
+is intentionally using Python 3.9. Do not use these instructions with Python
+3.10 or newer.
 
 ### 3. Verify the Environment
 
@@ -72,6 +80,256 @@ running from outside an activated conda shell:
 ```bash
 export PYTHON="$HOME/miniconda3/envs/able/bin/python"
 ```
+
+---
+
+## Docker Clean-Install Test
+
+Docker is useful when you want to test the pipeline as if it were running on a
+new machine. The image installs Python 3.9, system build tools, everything in
+`requirements.txt`, and the PyFE Git stack from `requirements-pyfe.txt`.
+
+Build the image from the repository root:
+
+```bash
+docker build -t radiomics-pipeline:py39 .
+```
+
+Check that the main packages installed:
+
+```bash
+docker run --rm radiomics-pipeline:py39 \
+  python -c "import SimpleITK, radiomics, pyfe, pyable; print('environment ok')"
+```
+
+Run the pipeline dry run from inside Docker. The project directory is mounted as
+`/workspace`, so the container reads the same `radiomics_config.yaml` and writes
+outputs back to the same host directory.
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/workspace \
+  -w /workspace \
+  radiomics-pipeline:py39 \
+  /app/run_radiomics_pipeline.sh /workspace/radiomics_config.yaml --dry-run
+```
+
+Run the full pipeline:
+
+```bash
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$PWD":/workspace \
+  -w /workspace \
+  radiomics-pipeline:py39 \
+  /app/run_radiomics_pipeline.sh /workspace/radiomics_config.yaml
+```
+
+For a truly fresh full run, set `pipeline.manifest_dir` and
+`pipeline.output_dir` in `radiomics_config.yaml` to new empty directories before
+starting Docker. Keep `pipeline.images_root` pointed at the patient image
+directory.
+
+On macOS or Windows Docker Desktop, replace `$(id -u):$(id -g)` with your local
+user setting if needed, or omit the `--user` line and fix file ownership after
+the test.
+
+---
+
+## One-Command Pipeline
+
+For routine hospital use, edit `radiomics_config.yaml` and run one command:
+
+```bash
+./run_radiomics_pipeline.sh
+```
+
+The default config path is `radiomics_config.yaml` next to the script. To use a
+different config:
+
+```bash
+./run_radiomics_pipeline.sh my_config.yaml
+```
+
+Fast dry run, useful before starting a long extraction:
+
+```bash
+./run_radiomics_pipeline.sh --dry-run
+```
+
+Pipeline paths and parallel jobs live in one place:
+
+```yaml
+pipeline:
+  images_root: "1_3D_images"
+  manifest_dir: "radiomics_manifests"
+  output_dir: "radiomics_features"
+  jobs: 4
+```
+
+The runner uses `augmentation.enabled` to choose the normal Stage 2 behavior:
+
+```yaml
+augmentation:
+  enabled: false  # original-only
+```
+
+Set `augmentation.enabled: true` when you want the original wide table plus a
+separate augmented-only wide table. For a special rerun of augmented samples
+only, keep `augmentation.enabled: true` and use:
+
+```bash
+./run_radiomics_pipeline.sh --mode augmentation-only
+```
+
+The one-command runner executes:
+
+```bash
+./stage1_build_manifests.sh ...
+./stage2_extract_features.sh ...
+./stage3_qc_features.sh ...
+```
+
+Final user-facing outputs are written to `pipeline.output_dir`:
+
+```text
+radiomics_features_wide.csv
+  original patient feature table; rows = number of patients
+
+radiomics_features_wide_augmented.csv
+  augmented feature table only, when augmentation.enabled is true
+
+qc_features/
+  QC counts and all wide feature values for review
+```
+
+---
+
+## Prepare Input Images from DICOM
+
+The radiomics pipeline does not read DICOM folders directly. First convert each
+MRI series into one 3D image file, then place those files into one folder per
+patient.
+
+### Expected Directory Layout
+
+Use this layout before running Stage 1:
+
+```text
+1_3D_images/
+  AR19/
+    T1w.mha
+    T1w_CONT.mha
+    T2w.mha
+    ADC.mha
+    ROI_T.nrrd
+  AR20/
+    T1w.mha
+    T1w_CONT.mha
+    T2w.mha
+    ADC.mha
+    ROI_T.nrrd
+```
+
+The patient folder name, such as `AR19`, becomes the `patient_id` in the output.
+
+### Required Image Names
+
+The default config expects these files:
+
+| Modality | Preferred filename | Meaning |
+|---|---|---|
+| `t1w` | `T1w.mha` | T1-weighted pre-contrast image |
+| `t1wc` | `T1w_CONT.mha` | T1-weighted post-contrast image |
+| `t2w` | `T2w.mha` | T2-weighted image |
+| `adc` | `ADC.mha` | ADC map |
+| ROI | `ROI_T.nrrd` | Tumor/target mask; label value defaults to `1` |
+
+The matcher is flexible: `T1w_CONT.mha`, names containing `T1` plus `CONT`,
+`contrast`, or `post`, and `.nrrd` variants are also accepted. Keep the
+pre-contrast T1 filename free of `CONT`, `contrast`, and `post`, because those
+tokens are reserved for `t1wc`.
+
+Extra files such as `DWI_B0.mha` or `DWI_B800.mha` can stay in the patient
+folder; they are ignored unless you add them to `modalities` in
+`radiomics_config.yaml`.
+
+### Convert a DICOM Series to `.mha`
+
+Each image file should come from exactly one DICOM series. If your DICOM export
+already has one folder per sequence, conversion is straightforward.
+
+Example input:
+
+```text
+DICOM/
+  AR19/
+    T1w/
+    T1w_CONT/
+    T2w/
+    ADC/
+```
+
+Convert one series with SimpleITK:
+
+```bash
+conda activate able
+python - <<'PY'
+from pathlib import Path
+import SimpleITK as sitk
+
+series_dir = Path("DICOM/AR19/T1w")
+output_path = Path("1_3D_images/AR19/T1w.mha")
+
+reader = sitk.ImageSeriesReader()
+series_ids = reader.GetGDCMSeriesIDs(str(series_dir))
+if not series_ids:
+    raise SystemExit(f"No DICOM series found in {series_dir}")
+if len(series_ids) > 1:
+    print(f"Multiple series found; using first series: {series_ids[0]}")
+
+dicom_files = reader.GetGDCMSeriesFileNames(str(series_dir), series_ids[0])
+reader.SetFileNames(dicom_files)
+image = reader.Execute()
+
+output_path.parent.mkdir(parents=True, exist_ok=True)
+sitk.WriteImage(image, str(output_path), True)
+print(f"Wrote {output_path}")
+PY
+```
+
+Repeat the same pattern for each modality:
+
+```text
+DICOM/AR19/T1w       -> 1_3D_images/AR19/T1w.mha
+DICOM/AR19/T1w_CONT  -> 1_3D_images/AR19/T1w_CONT.mha
+DICOM/AR19/T2w       -> 1_3D_images/AR19/T2w.mha
+DICOM/AR19/ADC       -> 1_3D_images/AR19/ADC.mha
+```
+
+You can also use 3D Slicer, ITK-SNAP, or another medical-image tool to export
+the same series as `.mha`, `.nrrd`, `.nii`, or `.nii.gz`; those extensions are
+accepted by the config.
+
+### Create or Export the ROI Mask
+
+Create the ROI mask in the same patient space using your segmentation tool.
+Save it as:
+
+```text
+1_3D_images/<patient_id>/ROI_T.nrrd
+```
+
+The mask should be a label image where the tumor/target voxels have value `1`.
+If your mask uses another label value, update:
+
+```yaml
+radiomics:
+  label: 1
+```
+
+in `radiomics_config.yaml`.
 
 ---
 
@@ -97,6 +355,8 @@ Outputs:
 
 ## Stage 2 — Extract Radiomics Features
 
+Run Stage 2 after Stage 1 has created `radiomics_manifests/*.json`:
+
 ```bash
 ./stage2_extract_features.sh radiomics_manifests radiomics_features radiomics_config.yaml 4
 ```
@@ -109,14 +369,83 @@ Arguments:
 | 2 | `radiomics_features` | Output directory |
 | 3 | `radiomics_config.yaml` | Configuration file |
 | 4 | `1` | Number of parallel patient jobs |
+| 5 | `all` | Run mode: `all`, `original-only`, or `augmentation-only` |
 
 Outputs:
-- `radiomics_features/radiomics_features_long.csv` — one row per patient × modality (original images only)
-- `radiomics_features/radiomics_features_long_augmented.csv` — same, including augmented samples
-- `radiomics_features/radiomics_features_wide.csv` — one row per patient (all modalities concatenated)
-- `radiomics_features/radiomics_features_wide_augmented.csv` — wide table including augmented samples
-- `radiomics_features/work/patients/<id>/qc/` — ROI overlay PNG images for quality control
-- `radiomics_features/radiomics_features_long_errors.csv` — patients that failed (when present)
+- `radiomics_features/radiomics_features_wide.csv` — final patient feature table, one row per patient
+- `radiomics_features/radiomics_features_wide_augmented.csv` — augmented patient feature table, one row per augmented sample, when augmentation is enabled
+- `radiomics_features/work/patients/<id>/resampled/` — intermediate resampled images
+- `radiomics_features/radiomics_features_errors.csv` — patients that failed (when present)
+
+Stage 2 uses long-format CSVs internally during extraction and concatenation,
+but those files are kept under `radiomics_features/work/intermediate/`. The
+hospital-facing feature tables are the wide CSVs above.
+
+Stage 2 modes:
+
+```bash
+# Original patients only.
+./stage2_extract_features.sh radiomics_manifests radiomics_features radiomics_config.yaml 4 original-only
+
+# Original patients, plus augmented patients if augmentation.enabled is true.
+./stage2_extract_features.sh radiomics_manifests radiomics_features radiomics_config.yaml 4 all
+
+# Augmented patients only. This leaves radiomics_features_wide.csv untouched.
+./stage2_extract_features.sh radiomics_manifests radiomics_features radiomics_config.yaml 4 augmentation-only
+```
+
+When augmentation is enabled, the augmented table is separate:
+
+```text
+radiomics_features/radiomics_features_wide.csv
+  original patients only
+
+radiomics_features/radiomics_features_wide_augmented.csv
+  augmented samples only
+```
+
+### Typical Full Run
+
+After DICOM conversion and ROI export, a normal run is:
+
+```bash
+conda activate able
+./stage1_build_manifests.sh 1_3D_images radiomics_manifests radiomics_config.yaml
+./stage2_extract_features.sh radiomics_manifests radiomics_features radiomics_config.yaml 4
+./stage3_qc_features.sh radiomics_features radiomics_manifests radiomics_config.yaml
+```
+
+---
+
+## Stage 3 — QC Feature Review
+
+Stage 3 is a QC review step for clinicians and data managers. It checks the
+final wide tables only. It does not calculate correlations and it does not
+require the long-format intermediate tables.
+
+```bash
+./stage3_qc_features.sh radiomics_features radiomics_manifests radiomics_config.yaml
+```
+
+Outputs:
+- `radiomics_features/qc_features/01_qc_summary.csv` — expected vs observed row and feature counts
+- `radiomics_features/qc_features/02_patient_row_counts.csv` — row count check per patient
+- `radiomics_features/qc_features/03_modality_feature_counts.csv` — feature column count per modality
+- `radiomics_features/qc_features/04_all_feature_columns.csv` — every feature column with missingness and numeric summary
+- `radiomics_features/qc_features/05_all_feature_values_wide.csv` — all patient-level wide feature values
+- `radiomics_features/qc_features/06_all_feature_values_wide_augmented.csv` — all augmented wide feature values, when present
+- `radiomics_features/qc_features/07_stage2_errors.csv` — copied Stage 2 errors, when present
+
+Options:
+
+```bash
+./stage3_qc_features.sh [features_dir] [manifest_dir] [config_path]
+```
+
+The final product for downstream analysis is the Stage 2 output directory,
+especially `radiomics_features_wide.csv`. Stage 3 helps confirm that this
+patient-level feature table has the expected number of patient rows and feature
+columns before it is shared or analyzed.
 
 ---
 
@@ -193,7 +522,7 @@ qc:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `Missing required package` on startup | Dependencies not installed | `pip install -r requirements.txt` in the `able` environment |
+| `Missing required package` on startup | Dependencies not installed | Re-run the two install commands for `requirements.txt` and `requirements-pyfe.txt` in the `able` environment |
 | Patient in `_errors.csv` with `missing required modalities` | `require_complete_patients: true` and a file is absent | Set `require_complete_patients: false` or add the missing file |
 | All features are `nan` | Wrong ROI label | Check `radiomics.label` in config matches your mask value |
 | Slow extraction | Many image types / large images | Set `image_types: [Original]` or reduce `bin_counts` |

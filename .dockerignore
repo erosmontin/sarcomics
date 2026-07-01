@@ -1,0 +1,20 @@
+.git/
+.agents/
+.codex/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Patient data and generated outputs are mounted at runtime, not copied into
+# the image. This keeps Docker builds small and avoids baking clinical data into
+# the container.
+1_3D_images/
+radiomics_manifests/
+radiomics_features/
+artifatcs/
+
+# Local environments and transient files.
+.env
+.venv/
+venv/
+*.log

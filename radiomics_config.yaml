@@ -1,10 +1,13 @@
 schema_version: 1
 
+pipeline:
+  # Hospital-facing pipeline inputs/outputs used by run_radiomics_pipeline.sh.
+  images_root: "1_3D_images"
+  manifest_dir: "radiomics_manifests"
+  output_dir: "radiomics_features"
+  jobs: 4
+
 search:
-  # Patient folders are scanned recursively, but these directories are preferred
-  # when more than one candidate matches a single-image entry.
-  preferred_directories:
-    - "1_3D_images"
   allowed_extensions:
     - ".mha"
     - ".mhd"
@@ -14,15 +17,14 @@ search:
 
 # Stage 2 extraction settings.
 reference_image: t1w
-working_spacing_mm: [2.0, 2.0, 2.0]
-minimum_physical_overlap_fraction: 0.20
+working_spacing_mm: [2.5, 2.5, 2.5]
+minimum_physical_overlap_fraction: 0.10
 
 require_complete_patients: false
 
-bin_counts: [16]
-# Backward-compatible name used by the PyFE tutorial; interpreted here as
+bin_counts: [8,16]
 # PyRadiomics GLCM distances.
-pyfe_radius: [1]
+pyfe_radius: [1,2]
 normalize: true
 
 intensity_scaling:
@@ -52,7 +54,7 @@ feature_cache:
   hash_file_contents: false
 
 augmentation:
-  enabled: false
+  enabled: true
   samples_per_patient: 2
   random_state: 42
   rotation_degrees:
@@ -69,7 +71,7 @@ augmentation:
     - [1.0, 1.0]
 
 roi:
-  name: "toi_T"
+  name: "roi_T"
   required: true
   multiple: false
   patterns:

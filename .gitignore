@@ -6,3 +6,4 @@ __pycache__
 artifatcs/
 radiomics_features/
 .DS_Store
+AGENTS.md
