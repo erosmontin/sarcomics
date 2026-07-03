@@ -1,0 +1,8 @@
+conda create -n able python=3.9 pip git -y
+conda activate able
+
+python -m pip install -r requirements.txt
+
+python -m pip install --ignore-requires-python --no-deps -r requirements-pyfe.txt
+
+python -c "import SimpleITK; import radiomics; import pyfe; import pyable; print('All imports successful')"

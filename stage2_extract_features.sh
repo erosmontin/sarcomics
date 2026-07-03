@@ -59,7 +59,7 @@ esac
   --augmented-output-csv "${LONG_AUGMENTED_CSV}" \
   --errors-csv "${ERRORS_CSV}" \
   --jobs "${JOBS}" \
-  "${EXTRA_ARGS[@]}"
+  ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 
 if [[ "${MODE}" != "augmentation-only" ]]; then
   "${PYTHON}" "${SCRIPT_DIR}/concatenate_radiomics_features.py" \
