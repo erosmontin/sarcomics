@@ -53,6 +53,14 @@ if [[ ! -f requirements-pyfe.txt ]]; then
     fail "requirements-pyfe.txt was not found in $PROJECT_DIR"
 fi
 
+if [[ ! -f installer.sh ]]; then
+    fail "installer.sh was not found in $PROJECT_DIR"
+fi
+
+if [[ ! -f installer.py ]]; then
+    fail "installer.py was not found in $PROJECT_DIR"
+fi
+
 if [[ ! -f run_radiomics_pipeline.sh ]]; then
     fail "run_radiomics_pipeline.sh was not found in $PROJECT_DIR"
 fi
@@ -113,62 +121,28 @@ else
     echo "Miniforge is already installed at $CONDA_DIR"
 fi
 
-# Make conda available in this non-interactive shell.
+# Make conda available to the shared installer in this non-interactive shell.
 source "$CONDA_DIR/etc/profile.d/conda.sh"
+export PATH="$CONDA_DIR/bin:$PATH"
 
 conda --version
 
-log "4. Creating the Python ${PYTHON_VERSION} environment"
+log "4. Installing the Python environment with installer.sh"
 
-if conda env list | awk '{print $1}' | grep -Fxq "$ENV_NAME"; then
-    echo "Conda environment '$ENV_NAME' already exists."
-else
-    conda create \
-        -n "$ENV_NAME" \
-        "python=$PYTHON_VERSION" \
-        pip \
-        git \
-        -y
+ENV_NAME="$ENV_NAME" PYTHON_VERSION="$PYTHON_VERSION" bash ./installer.sh --env-name "$ENV_NAME"
+
+export PYTHON="$CONDA_DIR/envs/$ENV_NAME/bin/python"
+
+if [[ ! -x "$PYTHON" ]]; then
+    fail "Expected Python executable was not found: $PYTHON"
 fi
 
-conda activate "$ENV_NAME"
+echo "Python executable: $PYTHON"
+"$PYTHON" --version
 
-echo "Python executable: $(which python)"
-python --version
+log "5. Verifying the environment"
 
-log "5. Installing Python packaging tools"
-
-python -m pip install --upgrade \
-    pip \
-    setuptools \
-    wheel
-
-log "6. Installing NumPy and Cython"
-
-python -m pip install \
-    "numpy>=1.23,<2.0" \
-    "Cython<3"
-
-log "7. Installing PyRadiomics"
-
-python -m pip install \
-    --no-build-isolation \
-    "PyRadiomics==3.0.1"
-
-log "8. Installing the main requirements"
-
-python -m pip install -r requirements.txt
-
-log "9. Installing the PyFE requirements"
-
-python -m pip install \
-    --ignore-requires-python \
-    --no-deps \
-    -r requirements-pyfe.txt
-
-log "10. Verifying the environment"
-
-python - <<'PY'
+"$PYTHON" - <<'PY'
 import sys
 
 import SimpleITK
@@ -185,30 +159,30 @@ print("pyable import: OK")
 print("Environment verification passed.")
 PY
 
-log "11. Checking dependency consistency"
+log "6. Checking dependency consistency"
 
 # pip check may identify intentional metadata issues in the PyFE stack.
 # Keep it visible, but do not hide its result.
-python -m pip check || {
+"$PYTHON" -m pip check || {
     echo
     echo "WARNING: pip check reported dependency metadata conflicts."
     echo "The pipeline test will continue so that runtime compatibility can be evaluated."
 }
 
-log "12. Preparing pipeline scripts"
+log "7. Preparing pipeline scripts"
 
 chmod +x \
     run_radiomics_pipeline.sh \
     stage1_build_manifests.sh \
     stage2_extract_features.sh \
-    stage3_qc_features.sh
-
-export PYTHON="$CONDA_DIR/envs/$ENV_NAME/bin/python"
+    stage3_qc_features.sh \
+    installer.sh \
+    installer.py
 
 echo "Pipeline Python: $PYTHON"
 "$PYTHON" --version
 
-log "13. Checking input directory"
+log "8. Checking input directory"
 
 "$PYTHON" - "$CONFIG_FILE" <<'PY'
 import sys
@@ -254,7 +228,7 @@ if len(patient_directories) > 10:
     print(f"  ... and {len(patient_directories) - 10} more")
 PY
 
-log "14. Running the radiomics pipeline"
+log "9. Running the radiomics pipeline"
 
 if [[ "$RUN_MODE" == "--dry-run" || "$RUN_MODE" == "dry-run" ]]; then
     ./run_radiomics_pipeline.sh "$CONFIG_FILE" --dry-run
@@ -264,7 +238,7 @@ else
     fail "Unknown run mode '$RUN_MODE'. Use 'full' or '--dry-run'."
 fi
 
-log "15. Locating generated outputs"
+log "10. Locating generated outputs"
 
 "$PYTHON" - "$CONFIG_FILE" <<'PY'
 import sys
@@ -329,7 +303,7 @@ else:
     print("Output directory was not created.")
 PY
 
-log "16. Restoring host ownership"
+log "11. Restoring host ownership"
 
 # HOST_UID and HOST_GID can be passed when starting Docker.
 if [[ -n "${HOST_UID:-}" && -n "${HOST_GID:-}" ]]; then

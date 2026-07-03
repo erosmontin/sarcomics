@@ -21,7 +21,7 @@ minimum_physical_overlap_fraction: 0.10
 
 require_complete_patients: false
 
-bin_counts: [16,32, 64, 128]
+bin_counts: [16,32, 64,128]
 pyfe_radius: [1,2,3]
 normalize: true
 
@@ -53,7 +53,7 @@ feature_cache:
 
 augmentation:
   enabled: true
-  samples_per_patient: 3
+  samples_per_patient: 10
   random_state: 42
   rotation_degrees:
     - [-5.0, 5.0]
